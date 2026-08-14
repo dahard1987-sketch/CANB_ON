@@ -46,13 +46,14 @@
       <div id="levelSlots" class="level-slots" data-total="{{ levels|length }}">
         {% for level in levels %}
         <article class="level-slot" data-level="{{ level }}">
-          <div class="level-badge">{{ level.split()[0][0] }}{{ level.split()[1] }}</div>
-          <div class="slot-copy">
+          <div class="slot-head">
             <strong>{{ level }}</strong>
+            <span class="slot-state">대기</span>
+          </div>
+          <div class="slot-copy">
             <span class="slot-filename">파일 없음</span>
             <span class="slot-error"></span>
           </div>
-          <span class="slot-state">대기</span>
           <button class="remove-button" type="button" aria-label="{{ level }} 파일 제거">제거</button>
         </article>
         {% endfor %}
