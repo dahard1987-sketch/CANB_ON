@@ -24,7 +24,6 @@ from update_excel import (
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 100 * 1024 * 1024))
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 app.config["JSON_AS_ASCII"] = False
@@ -71,7 +70,7 @@ def _public_item(item: dict[str, Any], **extra: Any) -> dict[str, Any]:
 
 @app.before_request
 def reject_cross_origin_writes():
-    """IAP에 더해 다른 사이트에서 전송되는 변경 요청도 거부합니다."""
+    """다른 사이트에서 전송되는 변경 요청을 거부합니다."""
     if request.method not in {"POST", "PUT", "PATCH", "DELETE"}:
         return None
 
@@ -100,6 +99,8 @@ def add_security_headers(response):
         "frame-ancestors 'none'; "
         "base-uri 'self'; form-action 'self'"
     )
+    if request.is_secure:
+        response.headers["Strict-Transport-Security"] = "max-age=31536000"
     if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response

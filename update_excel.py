@@ -10,6 +10,7 @@ import ssl
 import time
 import unicodedata
 import warnings
+from collections import Counter
 from datetime import (
     date,
     datetime,
@@ -61,14 +62,23 @@ SOURCE_SHEET_NAME = "학생 상세"
 MAX_COLUMN = 11
 
 # G열에서 찾을 수 있는 레벨과 대상 Google Sheets 탭 이름
-SUPPORTED_LEVELS = tuple(
-    f"{family} {number}"
-    for family in ("Hepta", "Octa", "Nona")
-    for number in range(1, 4)
+SUPPORTED_LEVELS = (
+    "Hexa 1",
+    "Hexa 2",
+    "Hepta 1",
+    "Hepta 2",
+    "Hepta S1",
+    "Hepta S2",
+    "Octa 1",
+    "Octa 2",
+    "Octa 3",
+    "Nona 1",
+    "Nona 2",
+    "Nona 3",
 )
 
 LEVEL_PATTERN = re.compile(
-    r"(?<![a-z])(hepta|octa|nona)\s*([1-3])(?!\d)",
+    r"(?<![a-z])(hexa|hepta|octa|nona)\s*(s\s*)?([1-3])(?!\d)",
     re.IGNORECASE,
 )
 
@@ -473,7 +483,10 @@ def normalize_level_value(value: Any) -> str | None:
         return None
 
     family = match.group(1).capitalize()
-    return f"{family} {match.group(2)}"
+    series = "S" if match.group(2) else ""
+    number = match.group(3)
+    normalized = f"{family} {series}{number}"
+    return normalized if normalized in SUPPORTED_LEVELS else None
 
 
 def detect_level_from_worksheet(worksheet) -> str:
@@ -483,7 +496,7 @@ def detect_level_from_worksheet(worksheet) -> str:
     같은 레벨이 여러 행에 반복되는 것은 허용하지만, 서로 다른 레벨이
     함께 있으면 어느 탭을 갱신해야 할지 모호하므로 거부합니다.
     """
-    detected_levels = {
+    detected_levels = [
         level
         for (value,) in worksheet.iter_rows(
             min_col=7,
@@ -491,20 +504,27 @@ def detect_level_from_worksheet(worksheet) -> str:
             values_only=True,
         )
         if (level := normalize_level_value(value)) is not None
-    }
+    ]
 
     if not detected_levels:
         raise ValueError(
-            "G열에서 Hepta 1~Nona 3 레벨을 찾지 못했습니다."
+            "G열에서 지원하는 레벨을 찾지 못했습니다."
         )
 
-    if len(detected_levels) > 1:
-        found = ", ".join(sorted(detected_levels))
+    counts = Counter(detected_levels)
+    if len(counts) > 1:
+        ranked = counts.most_common()
+        primary_level, primary_count = ranked[0]
+        second_count = ranked[1][1]
+        if primary_count > second_count and primary_count / len(detected_levels) >= 0.8:
+            return primary_level
+
+        found = ", ".join(sorted(counts))
         raise ValueError(
-            f"G열에서 서로 다른 레벨이 발견되었습니다: {found}"
+            f"G열의 레벨을 하나로 확인할 수 없습니다: {found}"
         )
 
-    return detected_levels.pop()
+    return next(iter(counts))
 
 
 def inspect_excel_file(

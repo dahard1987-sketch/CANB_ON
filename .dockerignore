@@ -6,5 +6,7 @@ __pycache__
 *.pyc
 .pytest_cache
 service-account.json
+client_secret*.json
 tests
 README.md
+artifacts

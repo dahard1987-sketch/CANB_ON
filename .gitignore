@@ -1,7 +1,9 @@
 service-account.json
+client_secret*.json
 .env
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 uploads/
+artifacts/

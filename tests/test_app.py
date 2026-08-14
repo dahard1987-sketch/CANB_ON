@@ -29,6 +29,12 @@ class LevelDetectionTests(unittest.TestCase):
     def test_normalizes_supported_level_variants(self):
         self.assertEqual(normalize_level_value("nona3"), "Nona 3")
         self.assertEqual(normalize_level_value("레벨: HEPTA  1반"), "Hepta 1")
+        self.assertEqual(normalize_level_value("hexa2"), "Hexa 2")
+        self.assertEqual(normalize_level_value("HEPTAS1"), "Hepta S1")
+        self.assertEqual(normalize_level_value("Hepta S 2반"), "Hepta S2")
+        self.assertIsNone(normalize_level_value("Octa S1"))
+        self.assertIsNone(normalize_level_value("Hepta 3"))
+        self.assertIsNone(normalize_level_value("Hexa 3"))
         self.assertIsNone(normalize_level_value("레벨"))
 
     def test_reads_level_from_column_g(self):
@@ -39,18 +45,38 @@ class LevelDetectionTests(unittest.TestCase):
         self.assertEqual(level, "Octa 2")
         self.assertEqual(len(rows), 3)
 
+    def test_reads_hepta_s_level_from_column_g(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "special-level.xlsx"
+            path.write_bytes(workbook_bytes(["Hepta S1", "Hepta S1"]))
+            level, rows = inspect_excel_file(path)
+        self.assertEqual(level, "Hepta S1")
+        self.assertEqual(len(rows), 3)
+
     def test_rejects_multiple_levels(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "mixed.xlsx"
             path.write_bytes(workbook_bytes(["Hepta 1", "Nona 3"]))
-            with self.assertRaisesRegex(ValueError, "서로 다른 레벨"):
+            with self.assertRaisesRegex(ValueError, "레벨을 하나로 확인"):
                 inspect_excel_file(path)
+
+    def test_ignores_one_stray_level_when_one_level_is_dominant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mostly-hexa.xlsx"
+            path.write_bytes(workbook_bytes(["Hexa 1"] * 9 + ["Octa 1"]))
+            level, _rows = inspect_excel_file(path)
+        self.assertEqual(level, "Hexa 1")
 
 
 class UploadApiTests(unittest.TestCase):
     def setUp(self):
         web_app.app.config.update(TESTING=True)
         self.client = web_app.app.test_client()
+
+    def test_home_is_public(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("READi 업데이터", response.get_data(as_text=True))
 
     def test_multiple_files_are_classified_without_filename(self):
         response = self.client.post(
@@ -115,8 +141,8 @@ class UploadApiTests(unittest.TestCase):
                 "/api/publish",
                 data={
                     "files": (
-                        io.BytesIO(workbook_bytes(["Hepta 3"])),
-                        "hepta.xlsx",
+                        io.BytesIO(workbook_bytes(["Hexa 1"])),
+                        "hexa.xlsx",
                     )
                 },
                 content_type="multipart/form-data",
