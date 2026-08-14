@@ -18,12 +18,18 @@
         </a>
       </header>
 
-      <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="엑셀 파일 선택 또는 끌어놓기">
+      <section id="dropzone" class="dropzone" tabindex="0" role="button" aria-label="엑셀 파일 업로드 또는 끌어놓기">
         <input id="fileInput" type="file" accept=".xlsx,.xlsm" multiple hidden>
-        <div class="drop-filetype" aria-hidden="true">XLS</div>
-        <h1>파일을 끌어놓으세요</h1>
-        <p>또는 <span id="browseButton" class="browse-link">파일 선택</span></p>
-        <span class="file-rule">XLSX · XLSM</span>
+        <div id="dropzoneIdle" class="dropzone-content">
+          <div class="drop-filetype" aria-hidden="true">XLS</div>
+          <h1>파일을 끌어놓으세요</h1>
+          <p>또는 <span id="browseButton" class="browse-link">파일 업로드</span></p>
+        </div>
+        <div id="processingState" class="processing-state" role="status" aria-live="polite" hidden>
+          <span class="processing-spinner" aria-hidden="true"></span>
+          <strong id="processingTitle">파일을 확인하고 있어요</strong>
+          <span id="processingDetail">잠시만 기다려 주세요.</span>
+        </div>
       </section>
 
       <div id="notice" class="notice" aria-live="polite" hidden></div>

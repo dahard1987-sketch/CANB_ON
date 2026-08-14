@@ -6,6 +6,10 @@ const notice = document.querySelector('#notice');
 const fileCount = document.querySelector('#fileCount');
 const readyCount = document.querySelector('#readyCount');
 const levelSlots = document.querySelector('#levelSlots');
+const dropzoneIdle = document.querySelector('#dropzoneIdle');
+const processingState = document.querySelector('#processingState');
+const processingTitle = document.querySelector('#processingTitle');
+const processingDetail = document.querySelector('#processingDetail');
 
 let batchSlots = {};
 let busy = false;
@@ -14,6 +18,25 @@ function showNotice(message, isError = false) {
   notice.textContent = message;
   notice.hidden = !message;
   notice.classList.toggle('error', isError);
+}
+
+function setBusyState(isBusy, title = '', detail = '') {
+  busy = isBusy;
+  fileInput.disabled = isBusy;
+  dropzone.classList.toggle('is-busy', isBusy);
+  dropzone.setAttribute('tabindex', isBusy ? '-1' : '0');
+  dropzone.setAttribute('aria-disabled', String(isBusy));
+  browseButton.setAttribute('aria-disabled', String(isBusy));
+  dropzoneIdle.hidden = isBusy;
+  processingState.hidden = !isBusy;
+
+  if (isBusy) {
+    processingTitle.textContent = title;
+    processingDetail.textContent = detail;
+    dropzone.setAttribute('aria-busy', 'true');
+  } else {
+    dropzone.removeAttribute('aria-busy');
+  }
 }
 
 function stateLabel(status) {
@@ -31,8 +54,10 @@ function renderBatch() {
     const filename = slot.querySelector('.slot-filename');
     const error = slot.querySelector('.slot-error');
     const state = slot.querySelector('.slot-state');
+    const removeButton = slot.querySelector('.remove-button');
 
     slot.classList.remove('has-file', 'uploading', 'success', 'failed');
+    removeButton.disabled = busy || !item;
     if (!item) {
       filename.textContent = '파일 없음';
       error.textContent = '';
@@ -73,15 +98,18 @@ async function parseResponse(response) {
 }
 
 async function stageFiles(files) {
+  if (busy) return;
   const excelFiles = [...files].filter((file) => /\.(xlsx|xlsm)$/i.test(file.name));
   if (!excelFiles.length) {
     showNotice('.xlsx 또는 .xlsm 파일을 선택해 주세요.', true);
     return;
   }
 
-  busy = true;
-  dropzone.classList.add('is-busy');
-  dropzone.setAttribute('aria-busy', 'true');
+  setBusyState(
+    true,
+    '파일을 확인하고 있어요',
+    `${excelFiles.length}개 파일의 학생 상세 시트 G열을 읽는 중입니다.`,
+  );
   publishButton.disabled = true;
   showNotice(`${excelFiles.length}개 파일의 G열을 확인하고 있습니다…`);
 
@@ -117,9 +145,7 @@ async function stageFiles(files) {
   } catch (error) {
     showNotice(error.message, true);
   } finally {
-    busy = false;
-    dropzone.classList.remove('is-busy');
-    dropzone.removeAttribute('aria-busy');
+    setBusyState(false);
     fileInput.value = '';
     renderBatch();
   }
@@ -139,7 +165,11 @@ async function publishAll() {
   );
   if (!actionable.length) return;
 
-  busy = true;
+  setBusyState(
+    true,
+    '시트를 업데이트하고 있어요',
+    `${actionable.length}개 파일을 Google Sheets에 반영 중입니다. 창을 닫지 마세요.`,
+  );
   actionable.forEach((item) => {
     item.status = 'uploading';
     item.error = null;
@@ -183,7 +213,7 @@ async function publishAll() {
     });
     showNotice(error.message, true);
   } finally {
-    busy = false;
+    setBusyState(false);
     publishButton.removeAttribute('aria-busy');
     publishButton.classList.remove('is-busy');
     publishButton.querySelector('span').textContent = '등록된 모든 파일 업데이트';
@@ -221,7 +251,9 @@ browseButton.addEventListener('click', (event) => {
   event.stopPropagation();
   if (!busy) fileInput.click();
 });
-fileInput.addEventListener('change', () => stageFiles(fileInput.files));
+fileInput.addEventListener('change', () => {
+  if (!busy) stageFiles(fileInput.files);
+});
 publishButton.addEventListener('click', publishAll);
 
 document.querySelectorAll('.level-slot').forEach((slot) => {
