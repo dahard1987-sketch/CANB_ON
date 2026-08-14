@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -10,6 +11,10 @@ from openpyxl import Workbook
 
 import app as web_app
 from update_excel import inspect_excel_file, normalize_level_value
+
+
+TEST_PASSWORD = "readi-test-password"
+TEST_PASSWORD_HASH = hashlib.sha256(TEST_PASSWORD.encode("utf-8")).hexdigest()
 
 
 def workbook_bytes(level_values: list[str], sheet_name: str = "학생 상세") -> bytes:
@@ -29,6 +34,9 @@ class LevelDetectionTests(unittest.TestCase):
     def test_normalizes_supported_level_variants(self):
         self.assertEqual(normalize_level_value("nona3"), "Nona 3")
         self.assertEqual(normalize_level_value("레벨: HEPTA  1반"), "Hepta 1")
+        self.assertEqual(normalize_level_value("hexa2"), "Hexa 2")
+        self.assertIsNone(normalize_level_value("Hepta 3"))
+        self.assertIsNone(normalize_level_value("Hexa 3"))
         self.assertIsNone(normalize_level_value("레벨"))
 
     def test_reads_level_from_column_g(self):
@@ -43,14 +51,65 @@ class LevelDetectionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "mixed.xlsx"
             path.write_bytes(workbook_bytes(["Hepta 1", "Nona 3"]))
-            with self.assertRaisesRegex(ValueError, "서로 다른 레벨"):
+            with self.assertRaisesRegex(ValueError, "레벨을 하나로 확인"):
                 inspect_excel_file(path)
+
+    def test_ignores_one_stray_level_when_one_level_is_dominant(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "mostly-hexa.xlsx"
+            path.write_bytes(workbook_bytes(["Hexa 1"] * 9 + ["Octa 1"]))
+            level, _rows = inspect_excel_file(path)
+        self.assertEqual(level, "Hexa 1")
+
+
+class AuthenticationTests(unittest.TestCase):
+    def setUp(self):
+        web_app.app.config.update(
+            TESTING=True,
+            APP_PASSWORD_SHA256=TEST_PASSWORD_HASH,
+            SECRET_KEY="test-session-secret",
+            SESSION_COOKIE_SECURE=False,
+        )
+        web_app._login_attempts.clear()
+        self.client = web_app.app.test_client()
+
+    def test_password_gate_login_and_logout(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 302)
+        self.assertTrue(response.headers["Location"].endswith("/login"))
+
+        wrong = self.client.post("/login", data={"password": "wrong"})
+        self.assertEqual(wrong.status_code, 401)
+        self.assertIn("비밀번호가 맞지 않습니다", wrong.get_data(as_text=True))
+
+        login = self.client.post("/login", data={"password": TEST_PASSWORD})
+        self.assertEqual(login.status_code, 302)
+
+        page = self.client.get("/")
+        self.assertEqual(page.status_code, 200)
+        self.assertIn("READi 업데이터", page.get_data(as_text=True))
+
+        logout = self.client.post("/logout")
+        self.assertEqual(logout.status_code, 302)
+        self.assertEqual(self.client.get("/").status_code, 302)
+
+    def test_api_requires_login(self):
+        response = self.client.post("/api/files")
+        self.assertEqual(response.status_code, 401)
+        self.assertIn("로그인이 만료", response.get_json()["error"])
 
 
 class UploadApiTests(unittest.TestCase):
     def setUp(self):
-        web_app.app.config.update(TESTING=True)
+        web_app.app.config.update(
+            TESTING=True,
+            APP_PASSWORD_SHA256=TEST_PASSWORD_HASH,
+            SECRET_KEY="test-session-secret",
+            SESSION_COOKIE_SECURE=False,
+        )
+        web_app._login_attempts.clear()
         self.client = web_app.app.test_client()
+        self.client.post("/login", data={"password": TEST_PASSWORD})
 
     def test_multiple_files_are_classified_without_filename(self):
         response = self.client.post(
@@ -115,8 +174,8 @@ class UploadApiTests(unittest.TestCase):
                 "/api/publish",
                 data={
                     "files": (
-                        io.BytesIO(workbook_bytes(["Hepta 3"])),
-                        "hepta.xlsx",
+                        io.BytesIO(workbook_bytes(["Hexa 1"])),
+                        "hexa.xlsx",
                     )
                 },
                 content_type="multipart/form-data",

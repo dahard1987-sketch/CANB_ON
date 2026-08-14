@@ -5,6 +5,7 @@ const publishButton = document.querySelector('#publishButton');
 const notice = document.querySelector('#notice');
 const fileCount = document.querySelector('#fileCount');
 const readyCount = document.querySelector('#readyCount');
+const levelSlots = document.querySelector('#levelSlots');
 
 let batchSlots = {};
 let busy = false;
@@ -51,7 +52,7 @@ function renderBatch() {
   const actionable = items.filter(
     (item) => (item.status === 'ready' || item.status === 'failed') && item.file,
   );
-  fileCount.textContent = `${items.length} / 9`;
+  fileCount.textContent = `${items.length} / ${levelSlots.dataset.total}`;
   readyCount.textContent = actionable.length;
   publishButton.disabled = busy || actionable.length === 0;
 }
@@ -64,6 +65,9 @@ async function parseResponse(response) {
     throw new Error('서버 응답을 읽을 수 없습니다.');
   }
   if (!response.ok) {
+    if (response.status === 401) {
+      window.location.assign('/login');
+    }
     const error = new Error(payload.error || '요청을 처리하지 못했습니다.');
     error.payload = payload;
     throw error;
