@@ -1,20 +1,13 @@
 from __future__ import annotations
 
-import hashlib
-import hmac
 import os
-import secrets
 import tempfile
-import threading
-import time
 import uuid
-from collections import deque
-from datetime import timedelta
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlsplit
 
-from flask import Flask, jsonify, redirect, render_template, request, session, url_for
+from flask import Flask, jsonify, render_template, request
 from werkzeug.exceptions import RequestEntityTooLarge
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -31,77 +24,11 @@ from update_excel import (
 
 MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", 100 * 1024 * 1024))
 ALLOWED_EXTENSIONS = {".xlsx", ".xlsm"}
-LOGIN_WINDOW_SECONDS = 10 * 60
-LOGIN_MAX_FAILURES = 8
-
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = MAX_UPLOAD_BYTES
 app.config["JSON_AS_ASCII"] = False
-app.config["APP_PASSWORD_SHA256"] = os.environ.get(
-    "APP_PASSWORD_SHA256", ""
-).strip().lower()
-app.config["SECRET_KEY"] = os.environ.get("APP_SESSION_SECRET") or secrets.token_hex(32)
-app.config["PERMANENT_SESSION_LIFETIME"] = timedelta(hours=12)
-app.config["SESSION_COOKIE_HTTPONLY"] = True
-app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
-app.config["SESSION_COOKIE_SECURE"] = os.environ.get(
-    "SESSION_COOKIE_SECURE",
-    "1" if os.environ.get("K_SERVICE") else "0",
-) == "1"
 # Cloud Run이 전달하는 원래 HTTPS 호스트를 Flask가 올바르게 인식하게 합니다.
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
-
-_login_attempts: dict[str, deque[float]] = {}
-_login_attempts_lock = threading.Lock()
-
-
-def _configured_password_hash() -> str:
-    value = str(app.config.get("APP_PASSWORD_SHA256", "")).strip().lower()
-    if len(value) != 64 or any(character not in "0123456789abcdef" for character in value):
-        return ""
-    return value
-
-
-def _auth_marker(password_hash: str) -> str:
-    return password_hash[:24]
-
-
-def _is_authenticated() -> bool:
-    password_hash = _configured_password_hash()
-    marker = session.get("readi_auth", "")
-    return bool(password_hash and hmac.compare_digest(marker, _auth_marker(password_hash)))
-
-
-def _client_key() -> str:
-    return request.remote_addr or "unknown"
-
-
-def _recent_failures(client_key: str, now: float) -> deque[float]:
-    cutoff = now - LOGIN_WINDOW_SECONDS
-    failures = _login_attempts.setdefault(client_key, deque())
-    while failures and failures[0] <= cutoff:
-        failures.popleft()
-    return failures
-
-
-def _login_retry_seconds(client_key: str) -> int:
-    now = time.monotonic()
-    with _login_attempts_lock:
-        failures = _recent_failures(client_key, now)
-        if len(failures) < LOGIN_MAX_FAILURES:
-            return 0
-        return max(1, int(LOGIN_WINDOW_SECONDS - (now - failures[0])))
-
-
-def _record_login_failure(client_key: str) -> None:
-    now = time.monotonic()
-    with _login_attempts_lock:
-        _recent_failures(client_key, now).append(now)
-
-
-def _clear_login_failures(client_key: str) -> None:
-    with _login_attempts_lock:
-        _login_attempts.pop(client_key, None)
 
 
 def _safe_filename(name: str) -> str:
@@ -157,17 +84,6 @@ def reject_cross_origin_writes():
     return None
 
 
-@app.before_request
-def require_site_password():
-    if request.endpoint in {"login", "healthz", "static"}:
-        return None
-    if _is_authenticated():
-        return None
-    if request.path.startswith("/api/"):
-        return jsonify({"error": "로그인이 만료되었습니다. 다시 로그인해 주세요."}), 401
-    return redirect(url_for("login"))
-
-
 @app.after_request
 def add_security_headers(response):
     response.headers["X-Content-Type-Options"] = "nosniff"
@@ -185,57 +101,9 @@ def add_security_headers(response):
     )
     if request.is_secure:
         response.headers["Strict-Transport-Security"] = "max-age=31536000"
-    if request.path.startswith("/api/") or request.path in {"/", "/login", "/logout"}:
+    if request.path.startswith("/api/"):
         response.headers["Cache-Control"] = "no-store"
     return response
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if _is_authenticated():
-        return redirect(url_for("index"))
-
-    password_hash = _configured_password_hash()
-    if not password_hash:
-        return render_template(
-            "login.html",
-            error="사이트 비밀번호가 아직 설정되지 않았습니다.",
-            unavailable=True,
-        ), 503
-
-    error = None
-    status_code = 200
-    if request.method == "POST":
-        client_key = _client_key()
-        retry_seconds = _login_retry_seconds(client_key)
-        if retry_seconds:
-            error = "입력 횟수가 너무 많습니다. 잠시 후 다시 시도해 주세요."
-            status_code = 429
-        else:
-            password = request.form.get("password", "")
-            candidate = hashlib.sha256(password.encode("utf-8")).hexdigest()
-            if hmac.compare_digest(candidate, password_hash):
-                _clear_login_failures(client_key)
-                session.clear()
-                session.permanent = True
-                session["readi_auth"] = _auth_marker(password_hash)
-                return redirect(url_for("index"))
-
-            _record_login_failure(client_key)
-            error = "비밀번호가 맞지 않습니다. 다시 입력해 주세요."
-            status_code = 401
-
-    return render_template(
-        "login.html",
-        error=error,
-        unavailable=False,
-    ), status_code
-
-
-@app.post("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
 
 
 @app.get("/")

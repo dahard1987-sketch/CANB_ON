@@ -1,24 +1,16 @@
 # READi 업데이터 Cloud Run 배포
 
-사이트는 공개 URL로 접속할 수 있지만, 업로드 화면은 앱의 공유 비밀번호로 보호합니다. 서비스 계정 JSON 키는 배포하지 않습니다.
+사이트와 업로드 API를 로그인 없이 공개합니다. 서비스 계정 JSON 키는 배포하지 않고 Cloud Run에 연결된 서비스 계정으로 Google Sheets를 호출합니다.
 
-## 보안 구성
+## 운영 구성
 
 - Google Sheets 호출: Cloud Run에 연결된 서비스 계정
-- 사이트 로그인: 공유 비밀번호의 SHA-256 해시
-- 로그인 세션: 별도 무작위 서명 키
-- 비밀 저장 위치: Google Secret Manager
+- 접속 방식: 로그인 없는 공개 URL
 - Cloud Run 최소 인스턴스: 0
 - Cloud Run 최대 인스턴스: 1
+- 인스턴스당 동시 요청: 1
 
-## 필요한 비밀
-
-다음 두 값을 Secret Manager에 저장합니다.
-
-- `readi-password-sha256`: 공유 비밀번호의 SHA-256 해시
-- `readi-session-secret`: 32바이트 이상의 무작위 세션 서명 키
-
-Cloud Run 서비스 계정에는 두 Secret에 대한 `roles/secretmanager.secretAccessor` 권한만 부여합니다.
+공개 URL을 아는 사람은 누구나 파일을 업로드하고 대상 스프레드시트를 업데이트할 수 있습니다. 비용 알림과 사용량을 확인하고, 필요하면 Cloud Run 서비스를 즉시 중지하세요.
 
 ## 배포
 
@@ -29,7 +21,6 @@ gcloud run deploy canb-on \
   --region asia-northeast3 \
   --service-account excel-updater@canb-online-export.iam.gserviceaccount.com \
   --set-env-vars GOOGLE_USE_ADC=1,GOOGLE_SPREADSHEET_ID=SPREADSHEET_ID \
-  --update-secrets APP_PASSWORD_SHA256=readi-password-sha256:1,APP_SESSION_SECRET=readi-session-secret:1 \
   --no-iap \
   --no-invoker-iam-check \
   --timeout 900 \
@@ -44,13 +35,16 @@ gcloud run deploy canb-on \
 ## 확인
 
 ```bash
+curl -I https://SERVICE_URL/
+curl -X POST https://SERVICE_URL/api/files
+```
+
+첫 요청은 로그인 이동 없이 `200`, 빈 업로드 요청은 `400`을 반환하면 공개 접속과 API 연결이 정상입니다.
+
+```bash
 gcloud run services describe canb-on \
   --project canb-online-export \
   --region asia-northeast3
 ```
 
-사이트에 접속했을 때 Google 로그인이 아니라 `READi 업데이터` 비밀번호 화면이 표시되어야 합니다. 로그인하지 않은 API 요청은 `401`로 거부되어야 합니다.
-
-## 비밀번호 변경
-
-새 비밀번호 해시를 Secret Manager의 새 버전으로 추가한 뒤 Cloud Run이 그 버전을 사용하도록 업데이트합니다. 비밀번호 해시가 달라지면 기존 로그인 세션도 자동으로 만료됩니다.
+서비스 계정 키 파일이나 비밀번호 Secret이 컨테이너 환경 변수에 연결되어 있지 않은지 함께 확인합니다.

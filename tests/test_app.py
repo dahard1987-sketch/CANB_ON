@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import io
-import hashlib
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,10 +10,6 @@ from openpyxl import Workbook
 
 import app as web_app
 from update_excel import inspect_excel_file, normalize_level_value
-
-
-TEST_PASSWORD = "readi-test-password"
-TEST_PASSWORD_HASH = hashlib.sha256(TEST_PASSWORD.encode("utf-8")).hexdigest()
 
 
 def workbook_bytes(level_values: list[str], sheet_name: str = "학생 상세") -> bytes:
@@ -73,54 +68,15 @@ class LevelDetectionTests(unittest.TestCase):
         self.assertEqual(level, "Hexa 1")
 
 
-class AuthenticationTests(unittest.TestCase):
-    def setUp(self):
-        web_app.app.config.update(
-            TESTING=True,
-            APP_PASSWORD_SHA256=TEST_PASSWORD_HASH,
-            SECRET_KEY="test-session-secret",
-            SESSION_COOKIE_SECURE=False,
-        )
-        web_app._login_attempts.clear()
-        self.client = web_app.app.test_client()
-
-    def test_password_gate_login_and_logout(self):
-        response = self.client.get("/")
-        self.assertEqual(response.status_code, 302)
-        self.assertTrue(response.headers["Location"].endswith("/login"))
-
-        wrong = self.client.post("/login", data={"password": "wrong"})
-        self.assertEqual(wrong.status_code, 401)
-        self.assertIn("비밀번호가 맞지 않습니다", wrong.get_data(as_text=True))
-
-        login = self.client.post("/login", data={"password": TEST_PASSWORD})
-        self.assertEqual(login.status_code, 302)
-
-        page = self.client.get("/")
-        self.assertEqual(page.status_code, 200)
-        self.assertIn("READi 업데이터", page.get_data(as_text=True))
-
-        logout = self.client.post("/logout")
-        self.assertEqual(logout.status_code, 302)
-        self.assertEqual(self.client.get("/").status_code, 302)
-
-    def test_api_requires_login(self):
-        response = self.client.post("/api/files")
-        self.assertEqual(response.status_code, 401)
-        self.assertIn("로그인이 만료", response.get_json()["error"])
-
-
 class UploadApiTests(unittest.TestCase):
     def setUp(self):
-        web_app.app.config.update(
-            TESTING=True,
-            APP_PASSWORD_SHA256=TEST_PASSWORD_HASH,
-            SECRET_KEY="test-session-secret",
-            SESSION_COOKIE_SECURE=False,
-        )
-        web_app._login_attempts.clear()
+        web_app.app.config.update(TESTING=True)
         self.client = web_app.app.test_client()
-        self.client.post("/login", data={"password": TEST_PASSWORD})
+
+    def test_home_is_public(self):
+        response = self.client.get("/")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("READi 업데이터", response.get_data(as_text=True))
 
     def test_multiple_files_are_classified_without_filename(self):
         response = self.client.post(

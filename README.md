@@ -29,7 +29,7 @@ py app.py
 
 ## 웹 배포
 
-Cloud Run에서는 JSON 키를 배포하지 않고 연결된 서비스 계정으로 Google Sheets를 호출합니다. 사이트는 공유 비밀번호로 보호하며, 비밀번호 해시와 세션 키는 Secret Manager에 저장합니다.
+Cloud Run에서는 JSON 키를 배포하지 않고 연결된 서비스 계정으로 Google Sheets를 호출합니다. 사이트와 업로드 API는 로그인 없이 공개되므로 URL을 아는 누구나 파일을 업로드하고 스프레드시트를 업데이트할 수 있습니다. 비용과 동시 업데이트 위험을 줄이기 위해 최대 인스턴스와 동시 요청 수를 각각 1로 제한합니다.
 
 전체 순서는 [Cloud Run 배포 안내](DEPLOY_CLOUD_RUN.md)를 참고하세요.
 

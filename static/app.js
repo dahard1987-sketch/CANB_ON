@@ -65,9 +65,6 @@ async function parseResponse(response) {
     throw new Error('서버 응답을 읽을 수 없습니다.');
   }
   if (!response.ok) {
-    if (response.status === 401) {
-      window.location.assign('/login');
-    }
     const error = new Error(payload.error || '요청을 처리하지 못했습니다.');
     error.payload = payload;
     throw error;
