@@ -5,7 +5,7 @@ Excel 파일을 브라우저에 드래그앤드롭하면 `학생 상세` 시트 
 지원 레벨:
 
 - Hexa 1, Hexa 2
-- Hepta 1, Hepta 2
+- Hepta 1, Hepta 2, Hepta S1, Hepta S2
 - Octa 1, Octa 2, Octa 3
 - Nona 1, Nona 2, Nona 3
 

@@ -67,6 +67,8 @@ SUPPORTED_LEVELS = (
     "Hexa 2",
     "Hepta 1",
     "Hepta 2",
+    "Hepta S1",
+    "Hepta S2",
     "Octa 1",
     "Octa 2",
     "Octa 3",
@@ -76,7 +78,7 @@ SUPPORTED_LEVELS = (
 )
 
 LEVEL_PATTERN = re.compile(
-    r"(?<![a-z])(hexa|hepta|octa|nona)\s*([1-3])(?!\d)",
+    r"(?<![a-z])(hexa|hepta|octa|nona)\s*(s\s*)?([1-3])(?!\d)",
     re.IGNORECASE,
 )
 
@@ -481,7 +483,9 @@ def normalize_level_value(value: Any) -> str | None:
         return None
 
     family = match.group(1).capitalize()
-    normalized = f"{family} {match.group(2)}"
+    series = "S" if match.group(2) else ""
+    number = match.group(3)
+    normalized = f"{family} {series}{number}"
     return normalized if normalized in SUPPORTED_LEVELS else None
 
 

@@ -35,6 +35,9 @@ class LevelDetectionTests(unittest.TestCase):
         self.assertEqual(normalize_level_value("nona3"), "Nona 3")
         self.assertEqual(normalize_level_value("레벨: HEPTA  1반"), "Hepta 1")
         self.assertEqual(normalize_level_value("hexa2"), "Hexa 2")
+        self.assertEqual(normalize_level_value("HEPTAS1"), "Hepta S1")
+        self.assertEqual(normalize_level_value("Hepta S 2반"), "Hepta S2")
+        self.assertIsNone(normalize_level_value("Octa S1"))
         self.assertIsNone(normalize_level_value("Hepta 3"))
         self.assertIsNone(normalize_level_value("Hexa 3"))
         self.assertIsNone(normalize_level_value("레벨"))
@@ -45,6 +48,14 @@ class LevelDetectionTests(unittest.TestCase):
             path.write_bytes(workbook_bytes(["Octa 2", "Octa 2"]))
             level, rows = inspect_excel_file(path)
         self.assertEqual(level, "Octa 2")
+        self.assertEqual(len(rows), 3)
+
+    def test_reads_hepta_s_level_from_column_g(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "special-level.xlsx"
+            path.write_bytes(workbook_bytes(["Hepta S1", "Hepta S1"]))
+            level, rows = inspect_excel_file(path)
+        self.assertEqual(level, "Hepta S1")
         self.assertEqual(len(rows), 3)
 
     def test_rejects_multiple_levels(self):
